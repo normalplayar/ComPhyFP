@@ -84,25 +84,19 @@ class OscillatorGUI:
         def driven_amp(F0, m, w0, w, b):
             return F0 / math.sqrt((m**2) * ((w0**2 - w**2)**2) + (b**2) * w**2)
 
+        self.mass = mass
+        self.A = A
+        self.b = b
+        self.F0 = F0
+        self.k = k
+        self.w0 = w0
+        self.wd = wd
+        self.tau = tau
+        self.t = 0
+        self.dt = 1 / fps
+        self.frames = frames
+
         self.xdata, self.y_normal, self.y_damped, self.y_driven = [], [], [], []
-
-        for i in range(frames + 1):
-            t = i / fps
-            self.xdata.append(t)
-
-            if self.show_normal.get():
-                v = velocity(A, w0, t)
-                self.y_normal.append(KE(mass, v))
-
-            if self.show_damped.get():
-                Ad = damped_amp(A, t, tau)
-                vd = velocity(Ad, wd, t)
-                self.y_damped.append(KE(mass, vd))
-
-            if self.show_driven.get():
-                Adrive = driven_amp(F0, mass, w0, wd, b)
-                vdrive = velocity(Adrive, wd, t)
-                self.y_driven.append(KE(mass, vdrive))
 
         self.ax.clear()
         self.ax.set_xlim(0, 8)
@@ -127,22 +121,43 @@ class OscillatorGUI:
 
         self.ax.legend()
 
-        def update(frame):
+        def update(_):
             if self.paused:
                 return [line for _, line in self.lines]
+
+            self.t += self.dt
+            self.xdata.append(self.t)
+
+            if self.show_normal.get():
+                v = -self.A * self.w0 * math.sin(self.w0 * self.t)
+                self.y_normal.append(0.5 * self.mass * v**2)
+
+            if self.show_damped.get():
+                Ad = self.A * math.exp(-self.t / (2 * self.tau))
+                v = -Ad * self.wd * math.sin(self.wd * self.t)
+                self.y_damped.append(0.5 * self.mass * v**2)
+
+            if self.show_driven.get():
+                Adrive = self.F0 / math.sqrt(
+                    (self.mass**2) * ((self.w0**2 - self.wd**2)**2) + (self.b**2) * self.wd**2)
+                v = -Adrive * self.wd * math.sin(self.wd * self.t)
+                self.y_driven.append(0.5 * self.mass * v**2)
+
             for label, line in self.lines:
                 if label == "normal":
-                    line.set_data(self.xdata[:frame], self.y_normal[:frame])
+                    line.set_data(self.xdata, self.y_normal)
                 elif label == "damped":
-                    line.set_data(self.xdata[:frame], self.y_damped[:frame])
+                    line.set_data(self.xdata, self.y_damped)
                 elif label == "driven":
-                    line.set_data(self.xdata[:frame], self.y_driven[:frame])
+                    line.set_data(self.xdata, self.y_driven)
+
+            # self.ax.set_xlim(max(0, self.t - 8), self.t)
             return [line for _, line in self.lines]
 
         if self.anim:
             self.anim.event_source.stop()
         self.paused = False
-        self.anim = FuncAnimation(self.fig, update, frames=frames, interval=25, blit=True)
+        self.anim = FuncAnimation(self.fig, update, frames=frames, interval=1000/fps, blit=False)
         self.canvas.draw()
 
         self.pause_button.config(state="normal", text="Pause")
