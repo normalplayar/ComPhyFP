@@ -39,13 +39,24 @@ class OscillatorGUI:
         ttk.Checkbutton(checkbox_frame, text="Damped Oscillation", variable=self.show_damped).grid(row=0, column=1)
         ttk.Checkbutton(checkbox_frame, text="Damped + Driven Oscillation", variable=self.show_driven).grid(row=0, column=2)
 
-        ttk.Button(root, text="Run Simulation", command=self.run_simulation).pack(pady=10)
+        button_frame = ttk.Frame(root)
+        button_frame.pack(pady=10)
+
+        self.run_button = ttk.Button(button_frame, text="Run Simulation", command=self.run_simulation)
+        self.run_button.grid(row=0, column=0, padx=5)
+
+        self.pause_button = ttk.Button(button_frame, text="Pause", command=self.toggle_pause, state="disabled")
+        self.pause_button.grid(row=0, column=1, padx=5)
+
+        self.stop_button = ttk.Button(button_frame, text="Stop", command=self.stop_animation, state="disabled")
+        self.stop_button.grid(row=0, column=2, padx=5)
 
         self.fig, self.ax = plt.subplots(figsize=(7, 4))
         self.canvas = FigureCanvasTkAgg(self.fig, master=root)
         self.canvas.get_tk_widget().pack()
 
         self.anim = None
+        self.paused = False
 
     def run_simulation(self):
         try:
@@ -73,25 +84,25 @@ class OscillatorGUI:
         def driven_amp(F0, m, w0, w, b):
             return F0 / math.sqrt((m**2) * ((w0**2 - w**2)**2) + (b**2) * w**2)
 
-        xdata, y_normal, y_damped, y_driven = [], [], [], []
+        self.xdata, self.y_normal, self.y_damped, self.y_driven = [], [], [], []
 
         for i in range(frames + 1):
             t = i / fps
-            xdata.append(t)
+            self.xdata.append(t)
 
             if self.show_normal.get():
                 v = velocity(A, w0, t)
-                y_normal.append(KE(mass, v))
+                self.y_normal.append(KE(mass, v))
 
             if self.show_damped.get():
                 Ad = damped_amp(A, t, tau)
                 vd = velocity(Ad, wd, t)
-                y_damped.append(KE(mass, vd))
+                self.y_damped.append(KE(mass, vd))
 
             if self.show_driven.get():
                 Adrive = driven_amp(F0, mass, w0, wd, b)
                 vdrive = velocity(Adrive, wd, t)
-                y_driven.append(KE(mass, vdrive))
+                self.y_driven.append(KE(mass, vdrive))
 
         self.ax.clear()
         self.ax.set_xlim(0, 8)
@@ -100,37 +111,71 @@ class OscillatorGUI:
         self.ax.set_ylabel("Kinetic Energy (J)")
         self.ax.grid(True)
 
-        lines = []
+        self.lines = []
 
         if self.show_normal.get():
             line_n, = self.ax.plot([], [], label="Normal")
-            lines.append(("normal", line_n))
+            self.lines.append(("normal", line_n))
 
         if self.show_damped.get():
             line_d, = self.ax.plot([], [], label="Damped")
-            lines.append(("damped", line_d))
+            self.lines.append(("damped", line_d))
 
         if self.show_driven.get():
             line_dd, = self.ax.plot([], [], label="Driven")
-            lines.append(("driven", line_dd))
+            self.lines.append(("driven", line_dd))
 
         self.ax.legend()
 
         def update(frame):
-            for label, line in lines:
+            if self.paused:
+                return [line for _, line in self.lines]
+            for label, line in self.lines:
                 if label == "normal":
-                    line.set_data(xdata[:frame], y_normal[:frame])
+                    line.set_data(self.xdata[:frame], self.y_normal[:frame])
                 elif label == "damped":
-                    line.set_data(xdata[:frame], y_damped[:frame])
+                    line.set_data(self.xdata[:frame], self.y_damped[:frame])
                 elif label == "driven":
-                    line.set_data(xdata[:frame], y_driven[:frame])
-            return [line for _, line in lines]
+                    line.set_data(self.xdata[:frame], self.y_driven[:frame])
+            return [line for _, line in self.lines]
 
         if self.anim:
             self.anim.event_source.stop()
-
+        self.paused = False
         self.anim = FuncAnimation(self.fig, update, frames=frames, interval=25, blit=True)
         self.canvas.draw()
+
+        self.pause_button.config(state="normal", text="Pause")
+        self.stop_button.config(state="normal")
+
+    def toggle_pause(self):
+        if self.anim is None:
+            return
+
+        if self.paused:
+            self.paused = False
+            self.pause_button.config(text="Pause")
+        else:
+            self.paused = True
+            self.pause_button.config(text="Resume")
+
+    def stop_animation(self):
+        if self.anim is None:
+            return
+        self.anim.event_source.stop()
+        self.anim = None
+        self.paused = False
+
+        self.ax.clear()
+        self.ax.set_xlim(0, 8)
+        self.ax.set_ylim(0, 25)
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Kinetic Energy (J)")
+        self.ax.grid(True)
+        self.canvas.draw()
+
+        self.pause_button.config(state="disabled", text="Pause")
+        self.stop_button.config(state="disabled")
 
 root = tk.Tk()
 app = OscillatorGUI(root)
