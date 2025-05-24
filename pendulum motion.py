@@ -4,6 +4,7 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from tkinter import messagebox
 
 class PendulumGUI:
     def __init__(self, root):
@@ -12,6 +13,7 @@ class PendulumGUI:
 
         self.params = {
             "Mass": 4.0,
+            "Amplitude": 2,
             "Length": 2.0,
             "Damping": 0.9,
             "Driven Force": 2.0
@@ -54,6 +56,7 @@ class PendulumGUI:
         self.pivot, = self.ax.plot(0, 0, 'ko', markersize=14)
         self.rod, = self.ax.plot([], [], lw=3, color='blue')
         self.bob_radius = 0.15
+        self.visual_length = 2.0
         self.bob = plt.Circle((0, 0), 0, fc='red')
         self.ax.add_patch(self.bob)
 
@@ -84,23 +87,26 @@ class PendulumGUI:
             self.length = float(self.entries["Length"].get())
             self.damping = float(self.entries["Damping"].get())
             self.driven_force = float(self.entries["Driven Force"].get())
+            self.amp = float(self.entries["Amplitude"].get())
+
+            if self.mass <= 0 or self.length <= 0 or self.damping <= 0 or self.driven_force <= 0 or self.amp <= 0:
+                    messagebox.showerror("Invalid Input", "All values must be greater than zero.")
+                    return
+            
         except ValueError:
-            print("Invalid input values")
+            messagebox.showerror("Invalid Input", "Please enter valid numeric values.")
             return
 
-        x = 0
-        y = -self.length
-        self.rod.set_data([0, x], [0, y])
-        self.bob.center = (x, y)
-        self.canvas.draw()
+        self.visual_length = 2.0
 
-        self.spring_constant = math.pi**2
-        self.natural_freq = math.sqrt(self.spring_constant / self.mass)
+        g = 9.81
+        self.natural_freq = math.sqrt(g / self.length)
 
-        self.ax.set_xlim(-self.length - 0.5, self.length + 0.5)
-        self.ax.set_ylim(-self.length - 0.5, self.length + 0.5)
+        fixed_view_size = 3
+        self.ax.set_xlim(-fixed_view_size, fixed_view_size)
+        self.ax.set_ylim(-fixed_view_size, fixed_view_size)
 
-        self.bob.radius = min(self.bob_radius, self.length * 0.15)
+        self.bob.radius = self.bob_radius
 
         self.FPS = 60
         self.dt = 1 / self.FPS
@@ -114,21 +120,21 @@ class PendulumGUI:
         def update(_):
             if not self.paused:
                 self.current_time += self.dt
-
                 t = self.current_time
 
                 if self.osc_type == 'normal':
-                    angle = self.normal_theta(t, w0=self.natural_freq)
+                    angle = self.normal_theta(t, A=self.amp, w0=self.natural_freq)
                 elif self.osc_type == 'damped':
-                    angle = self.damped_theta(t, b=self.damping, m=self.mass, w0=self.natural_freq)
+                    angle = self.damped_theta(t, A=self.amp, b=self.damping, m=self.mass, w0=self.natural_freq)
                 elif self.osc_type == 'driven':
                     angle = self.driven_theta(t, F0=self.driven_force, m=self.mass, w0=self.natural_freq,
-                                              w=self.natural_freq, b=self.damping)
+                                            w=self.natural_freq, b=self.damping)
                 else:
                     angle = 0
 
-                x = self.length * math.sin(angle)
-                y = -self.length * math.cos(angle)
+
+                x = self.visual_length * math.sin(angle)
+                y = -self.visual_length * math.cos(angle)
 
                 self.rod.set_data([0, x], [0, y])
                 self.bob.center = (x, y)
