@@ -1,101 +1,137 @@
 import math
+import tkinter as tk
+from tkinter import ttk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
-frames = 60
-pi = math.pi
-e = math.e
+class OscillatorGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Oscillator Kinetic Energy Animation")
 
-def displacement(A, w, t, phaseconstant=0):
-    return A * math.cos(w * t + phaseconstant)
+        self.entries = {}
+        self.options = {
+            "Mass": 4,
+            "Amplitude": 2,
+            "Damping": 0.9,
+            "Driven Force": 2
+        }
 
-def velocity(A, w, t, phaseconstant=0):
-    return -A * w * math.sin(w * t + phaseconstant)
+        input_frame = ttk.Frame(root)
+        input_frame.pack(pady=5)
 
-def acceleration(A, w, t, phaseconstant=0):
-    return -A * (w**2) * math.cos(w * t + phaseconstant)
+        for i, (label, default) in enumerate(self.options.items()):
+            ttk.Label(input_frame, text=label).grid(row=i, column=0, sticky="e")
+            entry = ttk.Entry(input_frame)
+            entry.insert(0, str(default))
+            entry.grid(row=i, column=1)
+            self.entries[label] = entry
 
-def kinetic_energy(m, v):
-    return 0.5 * m * (v**2)
+        self.show_normal = tk.BooleanVar(value=True)
+        self.show_damped = tk.BooleanVar(value=True)
+        self.show_driven = tk.BooleanVar(value=True)
 
-def potential_energy(k, x):
-    return 0.5 * k * (x**2)
+        checkbox_frame = ttk.Frame(root)
+        checkbox_frame.pack(pady=5)
 
-def mechanical_energy(k, A):
-    return 0.5 * k * (A**2)
+        ttk.Checkbutton(checkbox_frame, text="Normal Oscillation", variable=self.show_normal).grid(row=0, column=0)
+        ttk.Checkbutton(checkbox_frame, text="Damped Oscillation", variable=self.show_damped).grid(row=0, column=1)
+        ttk.Checkbutton(checkbox_frame, text="Damped + Driven Oscillation", variable=self.show_driven).grid(row=0, column=2)
 
-def underdamping_displacement(A0, b, m, t, w, phaseconstant=0):
-    return A0 * e**(-t * b / (2 * m)) * math.cos(w * t + phaseconstant)
+        ttk.Button(root, text="Run Simulation", command=self.run_simulation).pack(pady=10)
 
-def damping(b, m, w0):
-    return (b / (2 * m * w0))**2
+        self.fig, self.ax = plt.subplots(figsize=(7, 4))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
+        self.canvas.get_tk_widget().pack()
 
-def damped_angular_frequency(w0, b, m):
-    return w0 * (math.sqrt(1 - damping(b, m, w0)))
+        self.anim = None
 
-def damped_energy(time, time_constant, E0):
-    return E0 * e**(-time / time_constant)
+    def run_simulation(self):
+        try:
+            mass = float(self.entries["Mass"].get())
+            A = float(self.entries["Amplitude"].get())
+            b = float(self.entries["Damping"].get())
+            F0 = float(self.entries["Driven Force"].get())
+        except ValueError:
+            print("Invalid input")
+            return
 
-def time_constant_calculation(m, b):
-    return m / b
+        k = math.pi**2
+        w0 = (k / mass)**0.5
+        damping_ratio = (b / (2 * mass * w0))**2
+        if damping_ratio >= 1:
+            damping_ratio = 0.999
+        wd = w0 * math.sqrt(1 - damping_ratio)
+        tau = mass / b
+        frames = 480
+        fps = 60
 
-def damped_amplitude(A0, time, time_constant):
-    return math.sqrt((A0**2) * e**(-time / time_constant))
+        def velocity(A, w, t): return -A * w * math.sin(w * t)
+        def KE(m, v): return 0.5 * m * v**2
+        def damped_amp(A0, t, tau): return A0 * math.exp(-t / (2 * tau))
+        def driven_amp(F0, m, w0, w, b):
+            return F0 / math.sqrt((m**2) * ((w0**2 - w**2)**2) + (b**2) * w**2)
 
-def driven_amplitude(F0, m, w0, w, b):
-    return F0 / (math.sqrt((m**2) * ((w0**2 - w**2)**2) + (b**2) * (w**2)))
+        xdata, y_normal, y_damped, y_driven = [], [], [], []
 
-xaxis = []
-yaxis_kinetic = []
-yaxis_damped_kinetic = []
-yaxis_damped_driven_kinetic = []
+        for i in range(frames + 1):
+            t = i / fps
+            xdata.append(t)
 
-spring_constant = pi**2
-mass = 4
-amplitude = 2
-damping_constant = 0.9
-driven_force = 2
+            if self.show_normal.get():
+                v = velocity(A, w0, t)
+                y_normal.append(KE(mass, v))
 
-natural_frequency = (spring_constant / mass)**0.5
-damped_frequency = damped_angular_frequency(natural_frequency, damping_constant, mass)
-time_constant = time_constant_calculation(mass, damping_constant)
-initial_total_energy = mechanical_energy(spring_constant, amplitude)
+            if self.show_damped.get():
+                Ad = damped_amp(A, t, tau)
+                vd = velocity(Ad, wd, t)
+                y_damped.append(KE(mass, vd))
 
-for i in range(480 + 1):
-    time = i / frames
-    xaxis.append(time)
+            if self.show_driven.get():
+                Adrive = driven_amp(F0, mass, w0, wd, b)
+                vdrive = velocity(Adrive, wd, t)
+                y_driven.append(KE(mass, vdrive))
 
-    # Normal kinetic energy
-    v = velocity(amplitude, natural_frequency, time)
-    yaxis_kinetic.append(kinetic_energy(mass, v))
+        self.ax.clear()
+        self.ax.set_xlim(0, 8)
+        self.ax.set_ylim(0, 25)
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Kinetic Energy (J)")
+        self.ax.grid(True)
 
-    # Damped kinetic energy
-    damped_amp = damped_amplitude(amplitude, time, time_constant)
-    v_damped = velocity(damped_amp, damped_frequency, time)
-    yaxis_damped_kinetic.append(kinetic_energy(mass, v_damped))
+        lines = []
 
-    # Damped driven kinetic energy
-    driven_amp = driven_amplitude(driven_force, mass, natural_frequency, damped_frequency, damping_constant)
-    v_driven = velocity(driven_amp, damped_frequency, time)
-    yaxis_damped_driven_kinetic.append(kinetic_energy(mass, v_driven))
+        if self.show_normal.get():
+            line_n, = self.ax.plot([], [], label="Normal")
+            lines.append(("normal", line_n))
 
-fig, axis = plt.subplots()
-animated_nkinetic, = axis.plot([], [], label="Normal")
-animated_dampedkinetic, = axis.plot([], [], label="Damped")
-animated_dampeddrivenkinetic, = axis.plot([], [], label="Damped + Driven")
+        if self.show_damped.get():
+            line_d, = self.ax.plot([], [], label="Damped")
+            lines.append(("damped", line_d))
 
-axis.set_xlim([0, 8])
-axis.set_ylim([0, 21])
-plt.xlabel("Time / s")
-plt.ylabel("Kinetic Energy / J")
-plt.legend()
-plt.grid(True, linewidth=1)
+        if self.show_driven.get():
+            line_dd, = self.ax.plot([], [], label="Driven")
+            lines.append(("driven", line_dd))
 
-def update(f):
-    animated_nkinetic.set_data(xaxis[:f], yaxis_kinetic[:f])
-    animated_dampedkinetic.set_data(xaxis[:f], yaxis_damped_kinetic[:f])
-    animated_dampeddrivenkinetic.set_data(xaxis[:f], yaxis_damped_driven_kinetic[:f])
-    return animated_nkinetic, animated_dampedkinetic, animated_dampeddrivenkinetic
+        self.ax.legend()
 
-animation = FuncAnimation(fig, update, frames=480, interval=25)
-plt.show()
+        def update(frame):
+            for label, line in lines:
+                if label == "normal":
+                    line.set_data(xdata[:frame], y_normal[:frame])
+                elif label == "damped":
+                    line.set_data(xdata[:frame], y_damped[:frame])
+                elif label == "driven":
+                    line.set_data(xdata[:frame], y_driven[:frame])
+            return [line for _, line in lines]
+
+        if self.anim:
+            self.anim.event_source.stop()
+
+        self.anim = FuncAnimation(self.fig, update, frames=frames, interval=25, blit=True)
+        self.canvas.draw()
+
+root = tk.Tk()
+app = OscillatorGUI(root)
+root.mainloop()
