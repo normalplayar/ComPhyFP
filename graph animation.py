@@ -4,6 +4,7 @@ from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+from tkinter import messagebox
 
 class OscillatorGUI:
     def __init__(self, root):
@@ -64,15 +65,21 @@ class OscillatorGUI:
             A = float(self.entries["Amplitude"].get())
             b = float(self.entries["Damping"].get())
             F0 = float(self.entries["Driven Force"].get())
+
+            if mass <= 0 or A <= 0 or b <= 0 or F0 <= 0:
+                messagebox.showerror("Invalid Input", "All values must be greater than zero.")
+                return
+
         except ValueError:
-            print("Invalid input")
+            messagebox.showerror("Invalid Input", "Please enter valid numeric values.")
             return
 
         k = math.pi**2
         w0 = (k / mass)**0.5
         damping_ratio = (b / (2 * mass * w0))**2
         if damping_ratio >= 1:
-            damping_ratio = 0.999
+            messagebox.showerror("Input Error", "Damping is too high — leads to overdamping.\nPlease use a smaller value.")
+            return
         wd = w0 * math.sqrt(1 - damping_ratio)
         tau = mass / b
         frames = 480
