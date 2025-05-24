@@ -11,12 +11,16 @@ class OscillatorGUI:
         self.root = root
         self.root.title("Oscillator Kinetic Energy Animation")
 
+        self.x_limits = (0, 8)
+        self.y_limits = (0, 50)
+
         self.entries = {}
         self.options = {
             "Mass": 4,
             "Amplitude": 2,
+            "Length": 2.0,
             "Damping": 0.9,
-            "Driven Force": 2
+            "Driving Force": 2
         }
 
         input_frame = ttk.Frame(root)
@@ -31,14 +35,14 @@ class OscillatorGUI:
 
         self.show_normal = tk.BooleanVar(value=True)
         self.show_damped = tk.BooleanVar(value=True)
-        self.show_driven = tk.BooleanVar(value=True)
+        self.show_dampeddriven = tk.BooleanVar(value=True)
 
         checkbox_frame = ttk.Frame(root)
         checkbox_frame.pack(pady=5)
 
         ttk.Checkbutton(checkbox_frame, text="Normal Oscillation", variable=self.show_normal).grid(row=0, column=0)
         ttk.Checkbutton(checkbox_frame, text="Damped Oscillation", variable=self.show_damped).grid(row=0, column=1)
-        ttk.Checkbutton(checkbox_frame, text="Damped + Driven Oscillation", variable=self.show_driven).grid(row=0, column=2)
+        ttk.Checkbutton(checkbox_frame, text="Damped + Driven Oscillation", variable=self.show_dampeddriven).grid(row=0, column=2)
 
         button_frame = ttk.Frame(root)
         button_frame.pack(pady=10)
@@ -64,9 +68,10 @@ class OscillatorGUI:
             mass = float(self.entries["Mass"].get())
             A = float(self.entries["Amplitude"].get())
             b = float(self.entries["Damping"].get())
-            F0 = float(self.entries["Driven Force"].get())
+            F0 = float(self.entries["Driving Force"].get())
+            L = float(self.entries["Length"].get())
 
-            if mass <= 0 or A <= 0 or b <= 0 or F0 <= 0:
+            if mass <= 0 or A <= 0 or b <= 0 or F0 <= 0 or L <= 0:
                 messagebox.showerror("Invalid Input", "All values must be greater than zero.")
                 return
 
@@ -74,12 +79,11 @@ class OscillatorGUI:
             messagebox.showerror("Invalid Input", "Please enter valid numeric values.")
             return
 
-        k = math.pi**2
-        w0 = (k / mass)**0.5
+        g = 9.81
+        w0 = math.sqrt(g / L)
         damping_ratio = (b / (2 * mass * w0))**2
         if damping_ratio >= 1:
-            messagebox.showerror("Input Error", "Damping is too high — leads to overdamping.\nPlease use a smaller value.")
-            return
+            damping_ratio = 0.999
         wd = w0 * math.sqrt(1 - damping_ratio)
         tau = mass / b
         frames = 480
@@ -88,14 +92,14 @@ class OscillatorGUI:
         def velocity(A, w, t): return -A * w * math.sin(w * t)
         def KE(m, v): return 0.5 * m * v**2
         def damped_amp(A0, t, tau): return A0 * math.exp(-t / (2 * tau))
-        def driven_amp(F0, m, w0, w, b):
+        def dampeddriven_amp(F0, m, w0, w, b):
             return F0 / math.sqrt((m**2) * ((w0**2 - w**2)**2) + (b**2) * w**2)
 
         self.mass = mass
         self.A = A
+        self.L = L
         self.b = b
         self.F0 = F0
-        self.k = k
         self.w0 = w0
         self.wd = wd
         self.tau = tau
@@ -103,11 +107,11 @@ class OscillatorGUI:
         self.dt = 1 / fps
         self.frames = frames
 
-        self.xdata, self.y_normal, self.y_damped, self.y_driven = [], [], [], []
+        self.xdata, self.y_normal, self.y_damped, self.y_dampeddriven = [], [], [], []
 
         self.ax.clear()
-        self.ax.set_xlim(0, 8)
-        self.ax.set_ylim(0, 25)
+        self.ax.set_xlim(*self.x_limits)
+        self.ax.set_ylim(*self.y_limits)
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Kinetic Energy (J)")
         self.ax.grid(True)
@@ -122,9 +126,9 @@ class OscillatorGUI:
             line_d, = self.ax.plot([], [], label="Damped")
             self.lines.append(("damped", line_d))
 
-        if self.show_driven.get():
-            line_dd, = self.ax.plot([], [], label="Driven")
-            self.lines.append(("driven", line_dd))
+        if self.show_dampeddriven.get():
+            line_dd, = self.ax.plot([], [], label="Damped and Driven")
+            self.lines.append(("dampeddriven", line_dd))
 
         self.ax.legend()
 
@@ -144,21 +148,20 @@ class OscillatorGUI:
                 v = -Ad * self.wd * math.sin(self.wd * self.t)
                 self.y_damped.append(0.5 * self.mass * v**2)
 
-            if self.show_driven.get():
+            if self.show_dampeddriven.get():
                 Adrive = self.F0 / math.sqrt(
                     (self.mass**2) * ((self.w0**2 - self.wd**2)**2) + (self.b**2) * self.wd**2)
                 v = -Adrive * self.wd * math.sin(self.wd * self.t)
-                self.y_driven.append(0.5 * self.mass * v**2)
+                self.y_dampeddriven.append(0.5 * self.mass * v**2)
 
             for label, line in self.lines:
                 if label == "normal":
                     line.set_data(self.xdata, self.y_normal)
                 elif label == "damped":
                     line.set_data(self.xdata, self.y_damped)
-                elif label == "driven":
-                    line.set_data(self.xdata, self.y_driven)
+                elif label == "dampeddriven":
+                    line.set_data(self.xdata, self.y_dampeddriven)
 
-            # self.ax.set_xlim(max(0, self.t - 8), self.t)
             return [line for _, line in self.lines]
 
         if self.anim:
@@ -189,8 +192,8 @@ class OscillatorGUI:
         self.paused = False
 
         self.ax.clear()
-        self.ax.set_xlim(0, 8)
-        self.ax.set_ylim(0, 25)
+        self.ax.set_xlim(*self.x_limits)
+        self.ax.set_ylim(*self.y_limits)
         self.ax.set_xlabel("Time (s)")
         self.ax.set_ylabel("Kinetic Energy (J)")
         self.ax.grid(True)
