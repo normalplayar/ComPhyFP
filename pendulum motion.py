@@ -54,7 +54,7 @@ class PendulumGUI:
         self.pivot, = self.ax.plot(0, 0, 'ko', markersize=14)
         self.rod, = self.ax.plot([], [], lw=3, color='blue')
         self.bob_radius = 0.15
-        self.bob = plt.Circle((0,0), self.bob_radius, fc='red')
+        self.bob = plt.Circle((0, 0), 0, fc='red')
         self.ax.add_patch(self.bob)
 
         self.anim = None
@@ -76,7 +76,7 @@ class PendulumGUI:
 
     def driven_theta(self, t, F0=None, m=None, w0=None, w=None, b=None):
         A = self.driven_amplitude(F0, m, w0, w, b)
-        return A * math.cos(w * t)
+        return A * math.cos(w * t) if t > 0 else 0
 
     def run_simulation(self):
         try:
@@ -87,6 +87,12 @@ class PendulumGUI:
         except ValueError:
             print("Invalid input values")
             return
+
+        x = 0
+        y = -self.length
+        self.rod.set_data([0, x], [0, y])
+        self.bob.center = (x, y)
+        self.canvas.draw()
 
         self.spring_constant = math.pi**2
         self.natural_freq = math.sqrt(self.spring_constant / self.mass)
