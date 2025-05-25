@@ -46,8 +46,9 @@ class OscillatorKEGUI:
         self.stop_button = ttk.Button(control_frame, text="Stop", command=self.stop_animation, state='disabled')
         self.stop_button.grid(row=0, column=2, padx=5)
 
-        self.fig, (self.ax_ke, self.ax_pend, self.ax_amp) = plt.subplots(1, 3, figsize=(18, 6))
+        self.fig, (self.ax_ke, self.ax_pend, self.ax_disp) = plt.subplots(1, 3, figsize=(18, 6))
 
+        # Kinetic Energy plot
         self.ax_ke.set_title("Kinetic Energy")
         self.ax_ke.set_xlabel("Time (s)")
         self.ax_ke.set_ylabel("Kinetic Energy (J)")
@@ -55,6 +56,7 @@ class OscillatorKEGUI:
         self.ax_ke.set_ylim(0, 50)
         self.ax_ke.grid(True)
 
+        # Pendulum Oscillation plot (visual pendulum)
         self.ax_pend.set_title("Pendulum Oscillation")
         fixed_view_size = 3
         self.ax_pend.set_xlim(-fixed_view_size, fixed_view_size)
@@ -62,12 +64,13 @@ class OscillatorKEGUI:
         self.ax_pend.set_aspect('equal')
         self.ax_pend.axis('off')
 
-        self.ax_amp.set_title("Amplitude")
-        self.ax_amp.set_xlabel("Time (s)")
-        self.ax_amp.set_ylabel("Amplitude (rad)")
-        self.ax_amp.set_xlim(0, 8)
-        self.ax_amp.set_ylim(0, 1.2)
-        self.ax_amp.grid(True)
+        # Displacement plot (angle in radians)
+        self.ax_disp.set_title("Displacement")
+        self.ax_disp.set_xlabel("Time (s)")
+        self.ax_disp.set_ylabel("Displacement (rad)")
+        self.ax_disp.set_xlim(0, 8)
+        self.ax_disp.set_ylim(-1.2, 1.2)
+        self.ax_disp.grid(True)
 
         self.canvas = FigureCanvasTkAgg(self.fig, master=root)
         self.canvas.get_tk_widget().pack()
@@ -81,16 +84,16 @@ class OscillatorKEGUI:
         self.ke_line, = self.ax_ke.plot([], [], label="Kinetic Energy")
         self.ax_ke.legend()
 
-        self.amp_line, = self.ax_amp.plot([], [], label="Amplitude", color='green')
-        self.ax_amp.legend()
+        self.disp_line, = self.ax_disp.plot([], [], label="Displacement", color='purple')
+        self.ax_disp.legend()
 
         self.anim = None
         self.paused = False
         self.current_time = 0
 
         self.xdata = []
-        self.ydata = []
-        self.ampdata = []
+        self.ke_data = []
+        self.disp_data = []
 
     def velocity_normal(self, A, w, t):
         return -A * w * math.sin(w * t)
@@ -117,12 +120,6 @@ class OscillatorKEGUI:
         A_ss = (F0 / m) / math.sqrt((w0**2 - w**2)**2 + (2 * gamma * w)**2)
         steady_state = A_ss * math.cos(w * t)
         return transient + steady_state
-
-    def amplitude_dampeddriven(self, t, F0=None, m=None, w0=None, w=None, b=None, A0=0.5):
-        gamma = b / (2 * m)
-        A_ss = (F0 / m) / math.sqrt((w0**2 - w**2)**2 + (2 * gamma * w)**2)
-        transient_amp = A0 * math.exp(-gamma * t)
-        return transient_amp + A_ss
 
     def run_simulation(self):
         if self.anim is not None:
@@ -158,15 +155,15 @@ class OscillatorKEGUI:
 
         self.A_ke = 2.0
 
-        self.xdata = []
-        self.ydata = []
-        self.ampdata = []
+        self.xdata.clear()
+        self.ke_data.clear()
+        self.disp_data.clear()
         self.ke_line.set_data([], [])
-        self.amp_line.set_data([], [])
+        self.disp_line.set_data([], [])
         self.ax_ke.set_xlim(0, 8)
         self.ax_ke.set_ylim(0, 50)
-        self.ax_amp.set_xlim(0, 8)
-        self.ax_amp.set_ylim(0, 1.2)
+        self.ax_disp.set_xlim(0, 8)
+        self.ax_disp.set_ylim(-1.2, 1.2)
 
         self.rod.set_data([0, 0], [0, 0])
         self.bob.radius = self.bob_radius
@@ -181,20 +178,19 @@ class OscillatorKEGUI:
 
         def update(frame):
             if not self.paused:
-                self.current_time += 1 / 60
+                self.current_time += 1 / 20
                 t = self.current_time
 
                 if osc_type == "normal":
                     v = self.velocity_normal(self.A_ke, self.w0, t)
-                    amp = 0.5
+                    theta = self.normal_theta(t, A=0.5, w=self.w0)
                 elif osc_type == "damped":
                     v = self.velocity_damped(self.A_ke, self.wd, t, self.tau)
-                    amp = 0.5 * math.exp(-self.damping * t / (2 * self.mass))
+                    theta = self.damped_theta(t, A=0.5, b=self.damping, m=self.mass, w0=self.w0)
                 elif osc_type == "dampeddriven":
                     gamma = self.damping / (2 * self.mass)
                     wd = self.wd
-                    angle = self.dampeddriven_theta(t, F0=self.driving_force, m=self.mass, w0=self.w0, w=wd, b=self.damping, A0=0.5)
-                    amp = self.amplitude_dampeddriven(t, F0=self.driving_force, m=self.mass, w0=self.w0, w=wd, b=self.damping, A0=0.5)
+                    theta = self.dampeddriven_theta(t, F0=self.driving_force, m=self.mass, w0=self.w0, w=wd, b=self.damping, A0=0.5)
 
                     transient_v = (-0.5 * math.exp(-gamma * t) * ( -gamma * math.cos(wd * t) - wd * math.sin(wd * t)))
                     A_ss = (self.driving_force / self.mass) / math.sqrt((self.w0**2 - wd**2)**2 + (2 * gamma * wd)**2)
@@ -204,28 +200,24 @@ class OscillatorKEGUI:
 
                 ke = self.kinetic_energy(self.mass, v)
                 self.xdata.append(t)
-                self.ydata.append(ke)
-                self.ampdata.append(amp)
+                self.ke_data.append(ke)
+                self.disp_data.append(theta)
 
-                self.ke_line.set_data(self.xdata, self.ydata)
+                self.ke_line.set_data(self.xdata, self.ke_data)
                 self.ax_ke.set_xlim(0, max(8, t + 1))
-                max_ke = max(self.ydata) if self.ydata else 50
+                max_ke = max(self.ke_data) if self.ke_data else 50
                 self.ax_ke.set_ylim(0, max(50, max_ke + 10))
 
-                self.amp_line.set_data(self.xdata, self.ampdata)
-                self.ax_amp.set_xlim(0, max(8, t + 1))
-                max_amp = max(self.ampdata) if self.ampdata else 1.2
-                self.ax_amp.set_ylim(0, max(1.2, max_amp + 0.2))
+                self.disp_line.set_data(self.xdata, self.disp_data)
+                self.ax_disp.set_xlim(0, max(8, t + 1))
+                min_disp = min(self.disp_data) if self.disp_data else -1.2
+                max_disp = max(self.disp_data) if self.disp_data else 1.2
+                self.ax_disp.set_ylim(min_disp - 0.1, max_disp + 0.1)
 
-                if osc_type == "normal":
-                    theta = self.normal_theta(t, A=0.5, w=self.w0)
-                elif osc_type == "damped":
-                    theta = self.damped_theta(t, A=0.5, b=self.damping, m=self.mass, w0=self.w0)
-                elif osc_type == "dampeddriven":
-                    theta = angle
-
-                x = self.length * math.sin(theta)
-                y = -self.length * math.cos(theta)
+                # Use fixed visual length for drawing
+                visual_length = 2
+                x = visual_length * math.sin(theta)
+                y = -visual_length * math.cos(theta)
 
                 self.rod.set_data([0, x], [0, y])
                 self.bob.center = (x, y)
@@ -237,7 +229,7 @@ class OscillatorKEGUI:
                     self.pause_button.config(state='disabled')
                     self.stop_button.config(state='disabled')
 
-            return self.ke_line, self.rod, self.bob, self.amp_line
+            return self.ke_line, self.rod, self.bob, self.disp_line
 
         self.anim = FuncAnimation(self.fig, update, blit=False, interval=16, repeat=False)
         self.canvas.draw()
@@ -265,10 +257,10 @@ class OscillatorKEGUI:
         self.stop_button.config(state='disabled')
 
         self.xdata.clear()
-        self.ydata.clear()
-        self.ampdata.clear()
+        self.ke_data.clear()
+        self.disp_data.clear()
         self.ke_line.set_data([], [])
-        self.amp_line.set_data([], [])
+        self.disp_line.set_data([], [])
         self.rod.set_data([], [])
         self.bob.center = (0, 0)
         self.canvas.draw_idle()
