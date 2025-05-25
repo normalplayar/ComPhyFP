@@ -95,6 +95,8 @@ class OscillatorKEGUI:
         self.ke_data = []
         self.disp_data = []
 
+        self.max_points = 200  # sliding window size for plots
+
     def velocity_normal(self, A, w, t):
         return -A * w * math.sin(w * t)
 
@@ -199,22 +201,30 @@ class OscillatorKEGUI:
                     v = transient_v + steady_v
 
                 ke = self.kinetic_energy(self.mass, v)
+
+                # Append data and keep only last max_points points for better performance
                 self.xdata.append(t)
                 self.ke_data.append(ke)
                 self.disp_data.append(theta)
+                if len(self.xdata) > self.max_points:
+                    self.xdata.pop(0)
+                    self.ke_data.pop(0)
+                    self.disp_data.pop(0)
 
+                # Update kinetic energy plot
                 self.ke_line.set_data(self.xdata, self.ke_data)
-                self.ax_ke.set_xlim(0, max(8, t + 1))
+                self.ax_ke.set_xlim(self.xdata[0], self.xdata[-1])
                 max_ke = max(self.ke_data) if self.ke_data else 50
                 self.ax_ke.set_ylim(0, max(50, max_ke + 10))
 
+                # Update displacement plot
                 self.disp_line.set_data(self.xdata, self.disp_data)
-                self.ax_disp.set_xlim(0, max(8, t + 1))
+                self.ax_disp.set_xlim(self.xdata[0], self.xdata[-1])
                 min_disp = min(self.disp_data) if self.disp_data else -1.2
                 max_disp = max(self.disp_data) if self.disp_data else 1.2
                 self.ax_disp.set_ylim(min_disp - 0.1, max_disp + 0.1)
 
-                # Use fixed visual length for drawing
+                # Draw pendulum using fixed visual length for clarity
                 visual_length = 2
                 x = visual_length * math.sin(theta)
                 y = -visual_length * math.cos(theta)
@@ -224,14 +234,9 @@ class OscillatorKEGUI:
 
                 self.canvas.draw_idle()
 
-                if t >= 15:
-                    self.anim.event_source.stop()
-                    self.pause_button.config(state='disabled')
-                    self.stop_button.config(state='disabled')
-
             return self.ke_line, self.rod, self.bob, self.disp_line
 
-        self.anim = FuncAnimation(self.fig, update, blit=False, interval=16, repeat=False)
+        self.anim = FuncAnimation(self.fig, update, blit=False, interval=50, repeat=False)
         self.canvas.draw()
 
     def pause_animation(self):
