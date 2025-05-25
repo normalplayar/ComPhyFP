@@ -6,7 +6,7 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tkinter import messagebox
 
-class OscillatorKEGUI:
+class OscillatorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Pendulum and Oscillator Simulator")
@@ -48,15 +48,13 @@ class OscillatorKEGUI:
 
         self.fig, (self.ax_ke, self.ax_pend, self.ax_disp) = plt.subplots(1, 3, figsize=(18, 6))
 
-        # Kinetic Energy plot
-        self.ax_ke.set_title("Kinetic Energy")
+        self.ax_ke.set_title("Energy")
         self.ax_ke.set_xlabel("Time (s)")
-        self.ax_ke.set_ylabel("Kinetic Energy (J)")
+        self.ax_ke.set_ylabel("Energy (J)")
         self.ax_ke.set_xlim(0, 8)
         self.ax_ke.set_ylim(0, 50)
         self.ax_ke.grid(True)
 
-        # Pendulum Oscillation plot (visual pendulum)
         self.ax_pend.set_title("Pendulum Oscillation")
         fixed_view_size = 3
         self.ax_pend.set_xlim(-fixed_view_size, fixed_view_size)
@@ -64,7 +62,6 @@ class OscillatorKEGUI:
         self.ax_pend.set_aspect('equal')
         self.ax_pend.axis('off')
 
-        # Displacement plot (angle in radians)
         self.ax_disp.set_title("Displacement")
         self.ax_disp.set_xlabel("Time (s)")
         self.ax_disp.set_ylabel("Displacement (rad)")
@@ -81,7 +78,10 @@ class OscillatorKEGUI:
         self.bob = plt.Circle((0, 0), 0, fc='red')
         self.ax_pend.add_patch(self.bob)
 
-        self.ke_line, = self.ax_ke.plot([], [], label="Kinetic Energy")
+        self.ke_line, = self.ax_ke.plot([], [], label="Kinetic Energy", color='blue')
+        self.pe_line, = self.ax_ke.plot([], [], label="Potential Energy", color='orange')
+        self.me_line, = self.ax_ke.plot([], [], label="Mechanical Energy", color='green')
+        self.thermal_line, = self.ax_ke.plot([], [], label="Thermal Energy", color='brown')
         self.ax_ke.legend()
 
         self.disp_line, = self.ax_disp.plot([], [], label="Displacement", color='purple')
@@ -93,9 +93,13 @@ class OscillatorKEGUI:
 
         self.xdata = []
         self.ke_data = []
+        self.pe_data = []
+        self.me_data = []
+        self.thermal_data = []
         self.disp_data = []
 
-        self.max_points = 200  # sliding window size for plots
+        self.initial_mechanical_energy = None
+        self.max_points = 200
 
     def velocity_normal(self, A, w, t):
         return -A * w * math.sin(w * t)
@@ -159,9 +163,18 @@ class OscillatorKEGUI:
 
         self.xdata.clear()
         self.ke_data.clear()
+        self.pe_data.clear()
+        self.me_data.clear()
+        self.thermal_data.clear()
         self.disp_data.clear()
+        self.initial_mechanical_energy = None
+
         self.ke_line.set_data([], [])
+        self.pe_line.set_data([], [])
+        self.me_line.set_data([], [])
+        self.thermal_line.set_data([], [])
         self.disp_line.set_data([], [])
+
         self.ax_ke.set_xlim(0, 8)
         self.ax_ke.set_ylim(0, 50)
         self.ax_disp.set_xlim(0, 8)
@@ -201,76 +214,73 @@ class OscillatorKEGUI:
                     v = transient_v + steady_v
 
                 ke = self.kinetic_energy(self.mass, v)
+                pe = self.mass * 9.81 * self.length * (1 - math.cos(theta))
+                me = ke + pe
 
-                # Append data and keep only last max_points points for better performance
+                if self.initial_mechanical_energy is None:
+                    self.initial_mechanical_energy = me
+
+                thermal = self.initial_mechanical_energy - me
+                if thermal < 0:
+                    thermal = 0
+
                 self.xdata.append(t)
                 self.ke_data.append(ke)
+                self.pe_data.append(pe)
+                self.me_data.append(me)
+                self.thermal_data.append(thermal)
                 self.disp_data.append(theta)
+
                 if len(self.xdata) > self.max_points:
                     self.xdata.pop(0)
                     self.ke_data.pop(0)
+                    self.pe_data.pop(0)
+                    self.me_data.pop(0)
+                    self.thermal_data.pop(0)
                     self.disp_data.pop(0)
 
-                # Update kinetic energy plot
                 self.ke_line.set_data(self.xdata, self.ke_data)
-                self.ax_ke.set_xlim(self.xdata[0], self.xdata[-1])
-                max_ke = max(self.ke_data) if self.ke_data else 50
-                self.ax_ke.set_ylim(0, max(50, max_ke + 10))
+                self.pe_line.set_data(self.xdata, self.pe_data)
+                self.me_line.set_data(self.xdata, self.me_data)
+                self.thermal_line.set_data(self.xdata, self.thermal_data)
 
-                # Update displacement plot
+                self.ax_ke.set_xlim(max(0, t - 8), t + 0.1)
+
+                max_energy = max(max(self.ke_data + self.pe_data + self.me_data + self.thermal_data), 10)
+                self.ax_ke.set_ylim(0, max_energy * 1.1)
+
                 self.disp_line.set_data(self.xdata, self.disp_data)
-                self.ax_disp.set_xlim(self.xdata[0], self.xdata[-1])
-                min_disp = min(self.disp_data) if self.disp_data else -1.2
-                max_disp = max(self.disp_data) if self.disp_data else 1.2
-                self.ax_disp.set_ylim(min_disp - 0.1, max_disp + 0.1)
+                self.ax_disp.set_xlim(max(0, t - 8), t + 0.1)
 
-                # Draw pendulum using fixed visual length for clarity
-                visual_length = 2
-                x = visual_length * math.sin(theta)
-                y = -visual_length * math.cos(theta)
-
-                self.rod.set_data([0, x], [0, y])
-                self.bob.center = (x, y)
+                x_bob = self.length * math.sin(theta)
+                y_bob = -self.length * math.cos(theta)
+                self.rod.set_data([0, x_bob], [0, y_bob])
+                self.bob.center = (x_bob, y_bob)
 
                 self.canvas.draw_idle()
 
-            return self.ke_line, self.rod, self.bob, self.disp_line
+            return self.ke_line, self.pe_line, self.me_line, self.thermal_line, self.disp_line, self.rod, self.bob
 
-        self.anim = FuncAnimation(self.fig, update, blit=False, interval=50, repeat=False)
+        self.anim = FuncAnimation(self.fig, update, interval=50, blit=False)
         self.canvas.draw()
 
     def pause_animation(self):
         if self.anim is None:
             return
+        self.paused = not self.paused
         if self.paused:
-            self.anim.event_source.start()
-            self.paused = False
-            self.pause_button.config(text="Pause")
-        else:
-            self.anim.event_source.stop()
-            self.paused = True
             self.pause_button.config(text="Resume")
+        else:
+            self.pause_button.config(text="Pause")
 
     def stop_animation(self):
         if self.anim is not None:
-            try:
-                self.anim.event_source.stop()
-            except Exception:
-                pass
+            self.anim.event_source.stop()
             self.anim = None
         self.pause_button.config(state='disabled', text="Pause")
         self.stop_button.config(state='disabled')
 
-        self.xdata.clear()
-        self.ke_data.clear()
-        self.disp_data.clear()
-        self.ke_line.set_data([], [])
-        self.disp_line.set_data([], [])
-        self.rod.set_data([], [])
-        self.bob.center = (0, 0)
-        self.canvas.draw_idle()
-
 if __name__ == "__main__":
     root = tk.Tk()
-    app = OscillatorKEGUI(root)
+    gui = OscillatorGUI(root)
     root.mainloop()
