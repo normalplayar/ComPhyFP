@@ -218,16 +218,14 @@ class OscillatorGUI:
 
                     v = transient_v + steady_v
 
-                # Calculate energies
                 ke = self.kinetic_energy(self.mass, v)
-                pe = self.mass * 9.81 * self.length * (1 - math.cos(theta))
+                pe = self.mass * g * self.length * (1 - math.cos(theta))
                 me = ke + pe
 
                 if self.initial_mechanical_energy is None:
                     self.initial_mechanical_energy = me
 
                 if osc_type == "normal":
-                    # Fix mechanical energy line to be flat
                     me = self.initial_mechanical_energy
 
                 thermal = self.initial_mechanical_energy - me
@@ -260,6 +258,11 @@ class OscillatorGUI:
 
                 self.disp_line.set_data(self.xdata, self.disp_data)
                 self.ax_disp.set_xlim(max(0, t - 8), t + 0.1)
+
+                max_disp = max(abs(val) for val in self.disp_data)
+                if max_disp < 1.2:
+                    max_disp = 1.2
+                self.ax_disp.set_ylim(-max_disp * 1.1, max_disp * 1.1)
 
                 visual_length = 2.5
                 x_bob = visual_length * math.sin(theta)
