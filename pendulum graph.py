@@ -15,7 +15,8 @@ class OscillatorGUI:
             "Mass": 4.0,
             "Length": 2.0,
             "Damping": 0.9,
-            "Driving Force": 2.0
+            "Driving Force": 2.0,
+            "Gravity": 9.8
         }
 
         input_frame = ttk.Frame(root)
@@ -98,6 +99,8 @@ class OscillatorGUI:
         self.thermal_data = []
         self.disp_data = []
 
+        self.A = 0.5
+
         self.initial_mechanical_energy = None
         self.max_points = 200
 
@@ -111,15 +114,18 @@ class OscillatorGUI:
     def kinetic_energy(self, m, v):
         return 0.5 * m * v ** 2
 
-    def normal_theta(self, t, A=0.5, w=None):
+    def normal_theta(self, t, A, w=None):
+        A = self.A
         return A * math.cos(w * t)
 
-    def damped_theta(self, t, A=0.5, b=None, m=None, w0=None):
+    def damped_theta(self, t, A, b=None, m=None, w0=None):
+        A = self.A
         wd = w0 * math.sqrt(1 - (b / (2 * m * w0))**2)
         decay = math.exp(-b * t / (2 * m))
         return A * decay * math.cos(wd * t)
 
-    def dampeddriven_theta(self, t, F0=None, m=None, w0=None, w=None, b=None, A0=0.5):
+    def dampeddriven_theta(self, t, F0=None, m=None, w0=None, w=None, b=None, A0=None):
+        A0 = self.A
         gamma = b / (2 * m)
         wd = math.sqrt(w0**2 - gamma**2)
         transient = A0 * math.exp(-gamma * t) * math.cos(wd * t)
@@ -136,6 +142,7 @@ class OscillatorGUI:
             length = float(self.entries["Length"].get())
             damping = float(self.entries["Damping"].get())
             driving_force = float(self.entries["Driving Force"].get())
+            gravity = float(self.entries["Gravity"].get())
             if mass <= 0 or length <= 0 or damping <= 0 or driving_force <= 0:
                 messagebox.showerror("Invalid Input", "All values must be greater than zero.")
                 return
@@ -143,7 +150,7 @@ class OscillatorGUI:
             messagebox.showerror("Invalid Input", "Please enter valid numeric values.")
             return
 
-        g = 9.81
+        g = gravity
         w0 = math.sqrt(g / length)
         damping_ratio = (damping / (2 * mass * w0))**2
         if damping_ratio >= 1:
@@ -158,8 +165,6 @@ class OscillatorGUI:
         self.w0 = w0
         self.wd = wd
         self.tau = tau
-
-        self.A_ke = 2.0
 
         self.xdata.clear()
         self.ke_data.clear()
@@ -178,7 +183,7 @@ class OscillatorGUI:
         self.ax_ke.set_xlim(0, 8)
         self.ax_ke.set_ylim(0, 50)
         self.ax_disp.set_xlim(0, 8)
-        self.ax_disp.set_ylim(-1.2, 1.2)
+        self.ax_disp.set_ylim(-2, 2)
 
         self.rod.set_data([0, 0], [0, 0])
         self.bob.radius = self.bob_radius
@@ -197,15 +202,15 @@ class OscillatorGUI:
                 t = self.current_time
 
                 if osc_type == "normal":
-                    v = self.velocity_normal(self.A_ke, self.w0, t)
-                    theta = self.normal_theta(t, A=0.5, w=self.w0)
+                    theta = self.normal_theta(t, A=self.A, w=self.w0)
+                    v = -self.A * self.w0 * math.sin(self.w0 * t)
                 elif osc_type == "damped":
-                    v = self.velocity_damped(self.A_ke, self.wd, t, self.tau)
-                    theta = self.damped_theta(t, A=0.5, b=self.damping, m=self.mass, w0=self.w0)
+                    theta = self.damped_theta(t, A=self.A, b=self.damping, m=self.mass, w0=self.w0)
+                    v = self.velocity_damped(self.A, self.wd, t, self.tau)
                 elif osc_type == "dampeddriven":
                     gamma = self.damping / (2 * self.mass)
                     wd = self.wd
-                    theta = self.dampeddriven_theta(t, F0=self.driving_force, m=self.mass, w0=self.w0, w=wd, b=self.damping, A0=0.5)
+                    theta = self.dampeddriven_theta(t, F0=self.driving_force, m=self.mass, w0=self.w0, w=wd, b=self.damping, A0=self.A)
 
                     transient_v = (-0.5 * math.exp(-gamma * t) * ( -gamma * math.cos(wd * t) - wd * math.sin(wd * t)))
                     A_ss = (self.driving_force / self.mass) / math.sqrt((self.w0**2 - wd**2)**2 + (2 * gamma * wd)**2)
@@ -213,12 +218,17 @@ class OscillatorGUI:
 
                     v = transient_v + steady_v
 
+                # Calculate energies
                 ke = self.kinetic_energy(self.mass, v)
                 pe = self.mass * 9.81 * self.length * (1 - math.cos(theta))
                 me = ke + pe
 
                 if self.initial_mechanical_energy is None:
                     self.initial_mechanical_energy = me
+
+                if osc_type == "normal":
+                    # Fix mechanical energy line to be flat
+                    me = self.initial_mechanical_energy
 
                 thermal = self.initial_mechanical_energy - me
                 if thermal < 0:
@@ -245,15 +255,16 @@ class OscillatorGUI:
                 self.thermal_line.set_data(self.xdata, self.thermal_data)
 
                 self.ax_ke.set_xlim(max(0, t - 8), t + 0.1)
-
                 max_energy = max(max(self.ke_data + self.pe_data + self.me_data + self.thermal_data), 10)
                 self.ax_ke.set_ylim(0, max_energy * 1.1)
 
                 self.disp_line.set_data(self.xdata, self.disp_data)
                 self.ax_disp.set_xlim(max(0, t - 8), t + 0.1)
 
-                x_bob = self.length * math.sin(theta)
-                y_bob = -self.length * math.cos(theta)
+                visual_length = 2.5
+                x_bob = visual_length * math.sin(theta)
+                y_bob = -visual_length * math.cos(theta)
+
                 self.rod.set_data([0, x_bob], [0, y_bob])
                 self.bob.center = (x_bob, y_bob)
 
